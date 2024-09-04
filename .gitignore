@@ -1,0 +1,8 @@
+/build/
+/data/*raw
+/data/*grad
+/tests/
+/doc/
+
+/external/unittest-cpp
+/external/stb-image

@@ -1,0 +1,14 @@
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/external/glfw-3.3.8/CMakeFiles/edit_cache.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/external/glfw-3.3.8/CMakeFiles/rebuild_cache.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/external/glfw-3.3.8/src/CMakeFiles/update_mappings.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/external/glfw-3.3.8/src/CMakeFiles/glfw.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/external/glfw-3.3.8/src/CMakeFiles/edit_cache.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/external/glfw-3.3.8/src/CMakeFiles/rebuild_cache.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/framework/CMakeFiles/framework.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/framework/CMakeFiles/edit_cache.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/framework/CMakeFiles/rebuild_cache.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/source/CMakeFiles/ray_casting.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/source/CMakeFiles/edit_cache.dir
+C:/Uni/6.Semester/Vis/Project/project/ExSciVis2023-main/cmake-build-debug/source/CMakeFiles/rebuild_cache.dir
