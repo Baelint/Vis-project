@@ -15,6 +15,7 @@ public:
   Volume_loader_raw() {}
 
   volume_data_type load_volume(std::string file_path);
+  std::vector<float> load_volume_float(std::string file_path);
 
   glm::ivec3 get_dimensions(const std::string file_path) const;
   unsigned   get_channel_count(const std::string file_path) const;

@@ -45,16 +45,6 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/${GLFW_DIRECTORY}/inclu
 set(GLM_DIRECTORY glm-0.9.5.3)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/${GLM_DIRECTORY})
 
-# Add NetCDF
-find_package(NetCDF REQUIRED)  # Find NetCDF package
-
-if(NETCDF_FOUND)
-    message(STATUS "NetCDF found: ${NetCDF_LIBRARIES}")
-    include_directories(${NetCDF_INCLUDE_DIRS})
-else()
-    message(FATAL_ERROR "NetCDF not found. Please install NetCDF and try again.")
-endif()
-
 # set(STBIMAGE_DIRECTORY stb-image)
 # include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/${STBIMAGE_DIRECTORY})
 
@@ -106,5 +96,3 @@ add_subdirectory(framework)
 
 add_subdirectory(source)
 
-# Linking NetCDF to executables
-target_link_libraries(${EXERCISE_SCIVIS} ${NetCDF_LIBRARIES})

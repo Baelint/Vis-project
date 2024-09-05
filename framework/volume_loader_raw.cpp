@@ -44,6 +44,10 @@ Volume_loader_raw::load_volume(std::string filepath)
   return data;
 }
 
+std::vector<float> Volume_loader_raw::load_volume_float(std::string filepath)
+{
+}
+
 glm::ivec3 Volume_loader_raw::get_dimensions(const std::string filepath) const
 {
   unsigned width = 0;
