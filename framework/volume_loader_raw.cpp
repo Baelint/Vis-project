@@ -46,6 +46,47 @@ Volume_loader_raw::load_volume(std::string filepath)
 
 std::vector<float> Volume_loader_raw::load_volume_float(std::string filepath)
 {
+    std::ifstream volume_file;
+    volume_file.open(filepath, std::ios::in | std::ios::binary);
+
+    std::vector<float> data;
+
+    if (volume_file.is_open()) {
+        glm::ivec3 vol_dim = get_dimensions(filepath); 
+        unsigned channels = get_channel_count(filepath);
+        unsigned byte_per_channel = get_bit_per_channel(filepath) / 8;
+
+        // Check if data is in format that can be read as float (4 byte)
+        if (byte_per_channel != sizeof(float)) {
+            std::cerr << "Error: File byte size per channel doesn't match float size!" << std::endl;
+            assert(0);
+        }
+
+        // Calculate total data size to read
+        size_t data_size = vol_dim.x * vol_dim.y * vol_dim.z * channels;  //byte_per_channel not needed as float is fixed size
+
+        // Resize the vector to hold the float data
+        data.resize(data_size);
+
+        // Read the raw binary data into the float vector
+        volume_file.seekg(0, std::ios::beg);
+        volume_file.read(reinterpret_cast<char*>(&data.front()), data_size * sizeof(float));
+        volume_file.close();
+
+        // Optional: Log or return the data
+        // std::cout << "Float volume file " << filepath << " successfully loaded" << std::endl;
+
+        return data;
+    }
+    else {
+        std::cerr << "File " << filepath << " doesn't exist! Check filepath!" << std::endl;
+        assert(0);
+        return data;
+    }
+
+    //never reached
+    assert(0);
+    return data;
 }
 
 glm::ivec3 Volume_loader_raw::get_dimensions(const std::string filepath) const
