@@ -314,6 +314,74 @@ void load_gradient_volume() {
 
 }
 
+float* volumeData;  // This array stores the raw data for u, v, and w consecutively.
+const int gridSize = 128; // 128x128x128 volume grid
+
+glm::vec3 get_velocity_at(glm::vec3 position) {
+    // I got helped with this, idk what this exactly does
+    glm::vec3 gridPosition = (position - glm::vec3(-10.0f)) / glm::vec3(0.15748031496f);
+
+    // Ensure indices are within bounds
+    int x = glm::clamp(int(gridPosition.x), 0, gridSize - 1);
+    int y = glm::clamp(int(gridPosition.y), 0, gridSize - 1);
+    int z = glm::clamp(int(gridPosition.z), 0, gridSize - 1);
+
+    // Calculating voxelIndex from gridPosition
+    int voxelIndex = z * gridSize * gridSize + y * gridSize + x;
+
+    // Fetching u, w, v components 1D array position in grid
+    int dataIndex = voxelIndex * 3;  
+
+    // As the grid is a flattened 1D array, values should be after each other and can be fetched this way
+    float u_val = volumeData[dataIndex];
+    float v_val = volumeData[dataIndex + 1];
+    float w_val = volumeData[dataIndex + 2];
+
+    return glm::vec3(u_val, v_val, w_val);
+}
+
+glm::vec3 streamline_euler(glm::vec3 start, float dt, int num_steps) {
+    glm::vec3 position = start;
+    for (int i = 0; i < num_steps; i++) {
+        // Get the velocity vector at the current position
+        glm::vec3 velocity = get_velocity_at(position);
+
+        // Update position with simple Eulers method. (can later change to Runge-Kutta. I wanted to keep it simple for now)
+        position += velocity * dt;
+
+        // Make sure the position stays within the 1x1x1 volume bounds. Also got helped, idk what clamp does.
+        // I assume it just limits the values of a variable to the given limit values
+        position = glm::clamp(position, glm::vec3(0.0f), glm::vec3(1.0f));
+
+    }
+    return position;
+}
+
+std::vector<glm::vec3> iterate_streamline(glm::vec3 startPoint, float stepSize, int maxSteps) {
+    std::vector<glm::vec3> streamline;
+    glm::vec3 position = startPoint;
+
+    // Add the start point to the streamline
+    streamline.push_back(position);
+
+    for (int i = 0; i < maxSteps; ++i) {
+        
+        // Use streamline_euler to update position
+        position = streamline_euler(position, stepSize, 1);
+
+        // Check if the particle is out of bounds
+        if (position.x < 0 || position.y < 0 || position.z < 0 ||
+            position.x > 1 || position.y > 1 || position.z > 1) {
+            break;  // Streamline is out of bounds
+        }
+
+        // Add the new position to the streamline
+        streamline.push_back(position);
+    }
+
+    return streamline;
+}
+
 void UpdateImGui()
 {
     ImGuiIO& io = ImGui::GetIO();
