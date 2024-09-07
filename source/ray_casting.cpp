@@ -106,7 +106,7 @@ Turntable  g_turntable;
 
 ///SETUP VOLUME RAYCASTER HERE
 // set the volume file
-std::string g_file_string = "../../../data/head_w256_h256_d225_c1_b8.raw";
+std::string g_file_string = "../../../data/tornado3d_w128_h128_d128_c3_b32.raw";
 //std::string g_file_string = "../../../data/Bucky_uncertainty_data_w32_h32_d32_c1_b8.raw";
 //std::string g_file_string = "../../../data/Engine_w256_h256_d256_c1_b8.raw";
 
