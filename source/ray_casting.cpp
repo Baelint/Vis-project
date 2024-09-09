@@ -244,10 +244,9 @@ private:
 
 bool read_volume(){
 
-    //init volume g_volume_loader
-    //Volume_loader_raw g_volume_loader;
     //read volume dimensions
     g_vol_dimensions = g_volume_loader.get_dimensions(g_file_string);
+    std::cout << "Volume dimensions: (" << g_vol_dimensions.x << ", " << g_vol_dimensions.y << ", " << g_vol_dimensions.z << ")" << std::endl;
 
     g_sampling_distance = 1.0f / glm::max(glm::max(g_vol_dimensions.x, g_vol_dimensions.y), g_vol_dimensions.z);
 
@@ -257,11 +256,19 @@ bool read_volume(){
 
     // calculating max volume bounds of volume (0.0 .. 1.0)
     g_max_volume_bounds = glm::vec3(g_vol_dimensions) / glm::vec3((float)max_dim);
+    std::cout << "Max volume bounds: (" << g_max_volume_bounds.x << ", " << g_max_volume_bounds.y << ", " << g_max_volume_bounds.z << ")" << std::endl;
 
     // loading volume file data
-    g_volume_data = g_volume_loader.load_volume(g_file_string);
+    g_volume_data = g_volume_loader.load_volume_float(g_file_string);
+    if (g_volume_data.empty()) {
+        std::cerr << "Failed to load volume data." << std::endl;
+        return false;
+    }
+    std::cout << "Volume data loaded successfully." << std::endl;
+
     g_channel_size = g_volume_loader.get_bit_per_channel(g_file_string) / 8;
     g_channel_count = g_volume_loader.get_channel_count(g_file_string);
+    std::cout << "Channel size: " << g_channel_size << ", Channel count: " << g_channel_count << std::endl;
 
     // setting up proxy geometry
     g_cube.freeVAO();
@@ -269,6 +276,10 @@ bool read_volume(){
 
     glActiveTexture(GL_TEXTURE0);
     g_volume_texture = createTexture3D(g_vol_dimensions.x, g_vol_dimensions.y, g_vol_dimensions.z, GL_RED, GL_UNSIGNED_BYTE, GL_RED, (char*)&g_volume_data[0]);
+    if (!g_volume_texture) {
+        std::cerr << "Failed to create texture." << std::endl;
+        return false;
+    }
 
     return 0 != g_volume_texture;
 
@@ -314,28 +325,42 @@ void load_gradient_volume() {
 
 }
 
-float* volumeData;  // This array stores the raw data for u, v, and w consecutively.
 const int gridSize = 128; // 128x128x128 volume grid
 
 glm::vec3 get_velocity_at(glm::vec3 position) {
-    // I got helped with this, idk what this exactly does
-    glm::vec3 gridPosition = (position - glm::vec3(-10.0f)) / glm::vec3(0.15748031496f);
 
-    // Ensure indices are within bounds
-    int x = glm::clamp(int(gridPosition.x), 0, gridSize - 1);
-    int y = glm::clamp(int(gridPosition.y), 0, gridSize - 1);
-    int z = glm::clamp(int(gridPosition.z), 0, gridSize - 1);
+    glm::vec3 gridPosition = position * glm::vec3(gridSize);
+    gridPosition = glm::clamp(gridPosition, glm::vec3(0), glm::vec3(gridSize - 1));
+
+    int x = static_cast<int>(gridPosition.x);
+    int y = static_cast<int>(gridPosition.y);
+    int z = static_cast<int>(gridPosition.z);
+
+    std::cout << "gridPosition: (" << x << ", " << y << ", " << z << ")" << std::endl;
+
+    // Check if indices are within bounds
+    if (x < 0 || x >= g_vol_dimensions.x ||
+        y < 0 || y >= g_vol_dimensions.y ||
+        z < 0 || z >= g_vol_dimensions.z) {
+        std::cerr << "Position out of bounds: (" << position.x << ", " << position.y << ", " << position.z << ")" << std::endl;
+        return glm::vec3(0.0f);  // Return a default zero vector if out of bounds
+    }
 
     // Calculating voxelIndex from gridPosition
     int voxelIndex = z * gridSize * gridSize + y * gridSize + x;
 
     // Fetching u, w, v components 1D array position in grid
     int dataIndex = voxelIndex * 3;  
+    std::cout << "dataIndex: " << dataIndex << std::endl;
+    if (dataIndex < 0 || dataIndex >= g_volume_data.size()) {
+        std::cerr << "Error: dataIndex out of bounds!" << std::endl;
+        return glm::vec3(0.0f);
+    }
 
     // As the grid is a flattened 1D array, values should be after each other and can be fetched this way
-    float u_val = volumeData[dataIndex];
-    float v_val = volumeData[dataIndex + 1];
-    float w_val = volumeData[dataIndex + 2];
+    float u_val = g_volume_data[dataIndex];
+    float v_val = g_volume_data[dataIndex + 1];
+    float w_val = g_volume_data[dataIndex + 2];
 
     return glm::vec3(u_val, v_val, w_val);
 }
@@ -345,6 +370,12 @@ glm::vec3 streamline_euler(glm::vec3 start, float dt, int num_steps) {
     for (int i = 0; i < num_steps; i++) {
         // Get the velocity vector at the current position
         glm::vec3 velocity = get_velocity_at(position);
+        //std::cout << "Velocity at Step " << i << ": (" << velocity.x << ", " << velocity.y << ", " << velocity.z << ")" << std::endl;
+
+        if (glm::length(velocity) < 1e-6) {
+            std::cerr << "Velocity near zero at Step " << i << ", stopping integration." << std::endl;
+            break;
+        }
 
         // Update position with simple Eulers method. (can later change to Runge-Kutta. I wanted to keep it simple for now)
         position += velocity * dt;
@@ -358,25 +389,30 @@ glm::vec3 streamline_euler(glm::vec3 start, float dt, int num_steps) {
 }
 
 std::vector<glm::vec3> iterate_streamline(glm::vec3 startPoint, float stepSize, int maxSteps) {
+
     std::vector<glm::vec3> streamline;
     glm::vec3 position = startPoint;
 
     // Add the start point to the streamline
     streamline.push_back(position);
+    //std::cout << "Step 0: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
 
     for (int i = 0; i < maxSteps; ++i) {
-        
+ 
         // Use streamline_euler to update position
         position = streamline_euler(position, stepSize, 1);
 
         // Check if the particle is out of bounds
         if (position.x < 0 || position.y < 0 || position.z < 0 ||
             position.x > 1 || position.y > 1 || position.z > 1) {
+            std::cerr << "Step " << i << " out of bounds: (" << position.x << ", " << position.y << ", " << position.z << ")" << std::endl;
             break;  // Streamline is out of bounds
         }
 
         // Add the new position to the streamline
         streamline.push_back(position);
+
+       // std::cout << "Step " << i + 1 << ": (" << position.x << ", " << position.y << ", " << position.z << ")\n";
     }
 
     return streamline;
@@ -1148,6 +1184,19 @@ int main(int argc, char* argv[])
         if (!g_pause)
             g_cube.draw();
         glUseProgram(0);
+
+        glm::vec3 start_point(0.5f, 0.5f, 0.5f); // Starting in the center of the volume (normalized space)
+        float step_size = 0.01f; // The size of the integration step
+        int max_steps = 100; // Maximum number of steps to take in the streamline
+
+        // Generate the streamline
+        std::cout << "Calling iterate_streamline..." << std::endl;
+        std::vector<glm::vec3> streamline = iterate_streamline(start_point, step_size, max_steps);
+
+        std::cout << "Streamline points: " << std::endl;
+        for (size_t i = 0; i < streamline.size(); ++i) {
+            std::cout << "Point " << i << ": (" << streamline[i].x << ", " << streamline[i].y << ", " << streamline[i].z << ")" << std::endl;
+        }
 
         //IMGUI ROUTINE begin    
         ImGuiIO& io = ImGui::GetIO();

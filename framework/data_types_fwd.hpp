@@ -4,7 +4,7 @@
 #include <vector>
 #include <cstdint>
 
-typedef std::vector<uint8_t> volume_data_type;
+typedef std::vector<float> volume_data_type;
 typedef std::vector<uint8_t> image_data_type;
 
 #endif // define DATA_TYPES_FWD
