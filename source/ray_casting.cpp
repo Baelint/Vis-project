@@ -44,6 +44,23 @@
 ///IMGUI INCLUDES
 #include <imgui_impl_glfw_gl3.h>
 
+const char* vertexShaderSource = "#version 330 core\n"
+
+"layout(location = 0) in vec3 aPos;\n"
+"void main()\n"
+"{\n"
+"   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+"}\0";
+
+const char* fragmentShaderSource = "#version 330 core\n"
+"out vec4 FragColor;\n"
+"void main()\n"
+"{\n"
+"  FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+"}\0";
+
+
+
 
 //-----------------------------------------------------------------------------
 // Helpers
@@ -325,6 +342,9 @@ void load_gradient_volume() {
 
 }
 
+//------------------------------------------------------------------------------------
+// Self-made
+
 const int gridSize = 128; // 128x128x128 volume grid
 
 glm::vec3 get_velocity_at(glm::vec3 position) {
@@ -336,7 +356,7 @@ glm::vec3 get_velocity_at(glm::vec3 position) {
     int y = static_cast<int>(gridPosition.y);
     int z = static_cast<int>(gridPosition.z);
 
-    std::cout << "gridPosition: (" << x << ", " << y << ", " << z << ")" << std::endl;
+    //std::cout << "gridPosition: (" << x << ", " << y << ", " << z << ")" << std::endl;
 
     // Check if indices are within bounds
     if (x < 0 || x >= g_vol_dimensions.x ||
@@ -351,7 +371,7 @@ glm::vec3 get_velocity_at(glm::vec3 position) {
 
     // Fetching u, w, v components 1D array position in grid
     int dataIndex = voxelIndex * 3;  
-    std::cout << "dataIndex: " << dataIndex << std::endl;
+    //std::cout << "dataIndex: " << dataIndex << std::endl;
     if (dataIndex < 0 || dataIndex >= g_volume_data.size()) {
         std::cerr << "Error: dataIndex out of bounds!" << std::endl;
         return glm::vec3(0.0f);
@@ -417,6 +437,21 @@ std::vector<glm::vec3> iterate_streamline(glm::vec3 startPoint, float stepSize, 
 
     return streamline;
 }
+
+std::vector<glm::vec3> prepare_line_vertices(const std::vector<glm::vec3>& streamline) {
+    std::vector<glm::vec3> vertices;
+
+    for (size_t i = 1; i < streamline.size(); ++i) {
+        glm::vec3 start = streamline[i - 1];
+        glm::vec3 end = streamline[i];
+
+        vertices.push_back(start);
+        vertices.push_back(end);
+    }
+    return vertices;
+}
+
+//------------------------------------------------------------------------------------
 
 void UpdateImGui()
 {
@@ -945,11 +980,63 @@ int main(int argc, char* argv[])
     g_transfer_fun.add(0.0f, glm::vec4(0.0, 0.0, 0.0, 0.0));
     g_transfer_fun.add(1.0f, glm::vec4(1.0, 1.0, 1.0, 1.0));
     g_transfer_dirty = true;
-
-
+   
     // init and upload volume texture
     bool check = read_volume();
 
+    //------------------------------------------------------------------------------------
+    // Self-made
+
+    unsigned int VBO;
+    glGenBuffers(1, &VBO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+    glm::vec3 start_point(0.5f, 0.5f, 0.5f);
+    float step_size = 0.05f;
+    int max_steps = 30;
+
+    std::vector<glm::vec3> streamline = iterate_streamline(start_point, step_size, max_steps);
+
+    std::vector<glm::vec3> vertices = prepare_line_vertices(streamline);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+
+    unsigned int vertexShader;
+    vertexShader = glCreateShader(GL_VERTEX_SHADER);
+
+    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glCompileShader(vertexShader);
+
+    
+
+    unsigned int fragmentShader;
+    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glCompileShader(fragmentShader);
+
+    unsigned int shaderProgram;
+    shaderProgram = glCreateProgram();
+
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+
+    int  success;
+    char infoLog[512];
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+
+    if (!success)
+    {
+        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+    }
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    //------------------------------------------------------------------------------------
     load_gradient_volume();
 
     // init and upload transfer function texture
@@ -1183,20 +1270,16 @@ int main(int argc, char* argv[])
             glm::value_ptr(model_view));
         if (!g_pause)
             g_cube.draw();
+
         glUseProgram(0);
+        //------------------------------------------------------------------------------------
+        // Self-made
 
-        glm::vec3 start_point(0.5f, 0.5f, 0.5f); // Starting in the center of the volume (normalized space)
-        float step_size = 0.01f; // The size of the integration step
-        int max_steps = 100; // Maximum number of steps to take in the streamline
+        glUseProgram(shaderProgram);
+        glBindVertexArray(VBO);
+        glDrawArrays(GL_LINES, 0, vertices.size());
 
-        // Generate the streamline
-        std::cout << "Calling iterate_streamline..." << std::endl;
-        std::vector<glm::vec3> streamline = iterate_streamline(start_point, step_size, max_steps);
-
-        std::cout << "Streamline points: " << std::endl;
-        for (size_t i = 0; i < streamline.size(); ++i) {
-            std::cout << "Point " << i << ": (" << streamline[i].x << ", " << streamline[i].y << ", " << streamline[i].z << ")" << std::endl;
-        }
+        //------------------------------------------------------------------------------------
 
         //IMGUI ROUTINE begin    
         ImGuiIO& io = ImGui::GetIO();
