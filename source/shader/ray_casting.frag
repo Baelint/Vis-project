@@ -201,36 +201,14 @@ void main()
     // now we start a while loop representing the ray's traversal of the volume.
     // in each iteration of the loop, we update the sampling position, adding a small shift in line with the direction of the ray.
     // the loop terminates when the sampling position is outside the volume boundary, which we check with the 'inside_volume_bounds' function
-    while (inside_volume_bounds(sampling_pos)) 
-    {      
-        // to determine the intensity at the current point p, we first need to retrieve a data value from the volume at p.
-        // this is made possible by a 'sample_data_volume' function, which takes the current position, 
-        // samples a value from 3D texture holding the volume data, and returns that value as a float in range [0,1].
-        float data_value = sample_data_volume(sampling_pos);
-
-        // now we can determine intensity at p.
-        // For this example, we can convert the data value to an intensity with a grey level proportional to the data value.
-        // We can leave the opacity channel with value 1 (opaque).
-        vec4 intensity = vec4(data_value, data_value, data_value, 1.f);
-
-        // To calculate the average value, we need to accumulate the intensity for all iterations of the loop:
-        sum_intensity += intensity;
-
-        // ...and count the number of samples we take:
-        ++num_samples;
-
-        // Finally, to continue along the traversal path of the ray, we update the sampling position
-        sampling_pos  += ray_increment;
-    }
+    
 
     // After traversal is done, we need to calculate the mean intensity.
     // To avoid dividing by zero, we check if any samples were taken (i.e. num_samples > 0) before calculating the final intensity value.
     // The final intensity is assigned to the output colour variable.
-    if (num_samples > 0.f){
-        out_col = sum_intensity / num_samples;
-    } else {
-        out_col = vec4(0.f);
-    }
+   
+    out_col = vec4(0.5f);
+    
 
 #endif
 

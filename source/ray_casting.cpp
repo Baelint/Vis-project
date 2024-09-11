@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <cmath>
+#include <random>
 
 ///GLM INCLUDES
 #define GLM_FORCE_RADIANS
@@ -43,24 +44,6 @@
 
 ///IMGUI INCLUDES
 #include <imgui_impl_glfw_gl3.h>
-
-const char* vertexShaderSource = "#version 330 core\n"
-
-"layout(location = 0) in vec3 aPos;\n"
-"void main()\n"
-"{\n"
-"   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-"}\0";
-
-const char* fragmentShaderSource = "#version 330 core\n"
-"out vec4 FragColor;\n"
-"void main()\n"
-"{\n"
-"  FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
-"}\0";
-
-
-
 
 //-----------------------------------------------------------------------------
 // Helpers
@@ -84,6 +67,7 @@ const char* fragmentShaderSource = "#version 330 core\n"
 #define STR_NEWLINE "\n"
 #endif
 
+std::vector<glm::vec3> concat_streamlines;
 
 int g_task_chosen = 0;
 int g_task_chosen_old = g_task_chosen;
@@ -91,6 +75,8 @@ bool g_lighting_toggle = false;
 bool g_binary_search_toggle = false;
 bool g_gradient_volume_toggle = true;
 
+const std::string g_file_line_vertex_shader("../../../source/shader/line_rendering.vert");
+const std::string g_file_line_fragment_shader("../../../source/shader/line_rendering.frag");
 
 const std::string g_file_vertex_shader("../../../source/shader/ray_casting.vert");
 const std::string g_file_fragment_shader("../../../source/shader/ray_casting.frag");
@@ -115,6 +101,17 @@ GLuint loadShaders(
     set_shader_define_value(f, "#define ENABLE_LIGHTING", std::to_string(g_lighting_toggle));
     set_shader_define_value(f, "#define ENABLE_BINARY_SEARCH", std::to_string(g_binary_search_toggle));
     set_shader_define_value(f, "#define USE_GRADIENT_VOLUME", std::to_string(g_gradient_volume_toggle));
+
+    return createProgram(v, f);
+}
+
+GLuint loadShadersline(
+    std::string const& vs,
+    std::string const& fs
+)
+{
+    std::string v = readFile(vs);
+    std::string f = readFile(fs);
 
     return createProgram(v, f);
 }
@@ -152,6 +149,7 @@ Window g_win(g_window_res);
 
 // Volume Rendering GLSL Program
 GLuint g_volume_program(0);
+GLuint line_program(0);
 std::string g_error_message;
 bool g_reload_shader_error = false;
 
@@ -172,6 +170,11 @@ glm::vec2 g_transfer_function_size = glm::vec2(0.0f);
 //imgui values
 bool g_over_gui = false;
 bool g_reload_shader = false;
+bool g_should_reseed_lines = false;
+bool g_render_random = false;
+bool g_render_gauss = false;
+bool g_render_uniform = false;
+//reload button stuffs
 bool g_reload_shader_pressed = false;
 bool g_show_transfer_function = false;
 
@@ -397,12 +400,15 @@ glm::vec3 streamline_euler(glm::vec3 start, float dt, int num_steps) {
             break;
         }
 
+
+        if (position.x < 0.0f || position.x > 1.0f ||
+            position.y < 0.0f || position.y > 1.0f ||
+            position.z < 0.0f || position.z > 1.0f) {
+            break;
+        }
+
         // Update position with simple Eulers method. (can later change to Runge-Kutta. I wanted to keep it simple for now)
         position += velocity * dt;
-
-        // Make sure the position stays within the 1x1x1 volume bounds. Also got helped, idk what clamp does.
-        // I assume it just limits the values of a variable to the given limit values
-        position = glm::clamp(position, glm::vec3(0.0f), glm::vec3(1.0f));
 
     }
     return position;
@@ -449,6 +455,64 @@ std::vector<glm::vec3> prepare_line_vertices(const std::vector<glm::vec3>& strea
         vertices.push_back(end);
     }
     return vertices;
+}
+
+std::vector<glm::vec3> randomize_startpoints(int num_points) {
+    std::vector<glm::vec3> startpoints;
+
+    std::random_device rd;  // Seed
+    std::mt19937 gen(rd()); // Mersenne Twister generator
+    std::uniform_real_distribution<float> dis(0.0f, 1.0f); // Uniform distribution [0, 1]
+
+    for (int i = 0; i < num_points; ++i) {
+        glm::vec3 point(dis(gen), dis(gen), dis(gen));
+        startpoints.push_back(point);
+    }
+
+    return startpoints;
+}
+
+std::vector<glm::vec3> uniform_startpoints(int points_per_dim) {
+    std::vector<glm::vec3> startpoints;
+
+    float spacing = 1.0f / (points_per_dim - 1);
+
+    for (int x = 0; x < points_per_dim; ++x) {
+        for (int y = 0; y < points_per_dim; ++y) {
+            for (int z = 0; z < points_per_dim; ++z) {
+                glm::vec3 start_point(
+                    x * spacing,
+                    y * spacing,
+                    z * spacing
+                );
+                startpoints.push_back(start_point);
+            }
+        }
+    }
+    return startpoints;
+}
+
+std::vector<glm::vec3> generate_gaussian_points(glm::vec3 center, float stddev, int num_points) {
+    std::vector<glm::vec3> startpoints;
+    std::default_random_engine generator;
+    std::normal_distribution<float> distribution(0.0f, stddev);
+
+    for (int i = 0; i < num_points; ++i) {
+        float x = center.x + distribution(generator);
+        float y = center.y + distribution(generator);
+        float z = center.z + distribution(generator);
+
+        startpoints.emplace_back(x, y, z);
+    }
+
+    return startpoints;
+}
+
+void concatenate_streamlines(const std::vector<glm::vec3>& streamlines) {
+    std::vector<glm::vec3> vertices = prepare_line_vertices(streamlines);
+    for (int i = 0; i < vertices.size(); i++) {
+        concat_streamlines.insert(concat_streamlines.end(), vertices.begin(), vertices.end());
+    }
 }
 
 //------------------------------------------------------------------------------------
@@ -647,6 +711,10 @@ void showGUI(){
         ImGui::TextWrapped(g_error_message.c_str());
 
         g_reload_shader ^= ImGui::Button("Reload Shader");
+
+        g_render_random ^= ImGui::Button("random");
+        g_render_gauss ^= ImGui::Button("gauss");
+        g_render_uniform ^= ImGui::Button("uniform");
 
     }
 
@@ -992,49 +1060,29 @@ int main(int argc, char* argv[])
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
 
-    glm::vec3 start_point(0.5f, 0.5f, 0.5f);
-    float step_size = 0.05f;
-    int max_steps = 30;
+    std::vector<glm::vec3> start_point_vector = uniform_startpoints(10);
 
-    std::vector<glm::vec3> streamline = iterate_streamline(start_point, step_size, max_steps);
+    float step_size = 0.01f;
+    int max_steps = 300;
 
-    std::vector<glm::vec3> vertices = prepare_line_vertices(streamline);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
 
-    unsigned int vertexShader;
-    vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    std::vector<glm::vec3> singular_streamline;
 
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
+
+    for (int i = 0; i < start_point_vector.size(); i++) {
+        singular_streamline = iterate_streamline(start_point_vector[i], step_size, max_steps);
+        concatenate_streamlines(singular_streamline);
+    }
 
     
 
-    unsigned int fragmentShader;
-    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
 
-    unsigned int shaderProgram;
-    shaderProgram = glCreateProgram();
-
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    int  success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-
-    if (!success)
-    {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
+    glBufferData(GL_ARRAY_BUFFER, concat_streamlines.size() * sizeof(glm::vec3), concat_streamlines.data(), GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+
+    glEnable(GL_BLEND);
 
     //------------------------------------------------------------------------------------
     load_gradient_volume();
@@ -1047,6 +1095,7 @@ int main(int argc, char* argv[])
     // edit volume.frag to define the result of our volume raycaster  
     try {
         g_volume_program = loadShaders(g_file_vertex_shader, g_file_fragment_shader);
+        line_program = loadShadersline(g_file_line_vertex_shader, g_file_line_fragment_shader);
     }
     catch (std::logic_error& e) {
         //std::cerr << e.what() << std::endl;
@@ -1268,16 +1317,79 @@ int main(int argc, char* argv[])
             glm::value_ptr(projection));
         glUniformMatrix4fv(glGetUniformLocation(g_volume_program, "Modelview"), 1, GL_FALSE,
             glm::value_ptr(model_view));
+
+        
         if (!g_pause)
             g_cube.draw();
 
         glUseProgram(0);
         //------------------------------------------------------------------------------------
         // Self-made
+        if (g_render_random) {
 
-        glUseProgram(shaderProgram);
+            concat_streamlines.clear();
+
+            std::vector<glm::vec3> start_point_vector = randomize_startpoints(500);
+
+            for (int i = 0; i < start_point_vector.size(); i++) {
+                singular_streamline = iterate_streamline(start_point_vector[i], step_size, max_steps);
+                concatenate_streamlines(singular_streamline);
+            }
+
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+            glBufferData(GL_ARRAY_BUFFER, concat_streamlines.size() * sizeof(glm::vec3), concat_streamlines.data(), GL_STATIC_DRAW);
+
+            g_render_random = false;
+
+        }
+        if (g_render_gauss) {
+            concat_streamlines.clear();
+
+            glm::vec3 tornado_center(0.5f, 0.5f, 0.5f); // Center of the dataset
+            float stddev = 0.20f; // Controls how concentrated points are
+            int num_points = 400; // Number of starting points
+
+            // Generate points using Gaussian distribution
+            std::vector<glm::vec3> start_point_vector = generate_gaussian_points(tornado_center, stddev, num_points);
+
+            for (int i = 0; i < start_point_vector.size(); i++) {
+                singular_streamline = iterate_streamline(start_point_vector[i], step_size, max_steps);
+                concatenate_streamlines(singular_streamline);
+            }
+
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+            glBufferData(GL_ARRAY_BUFFER, concat_streamlines.size() * sizeof(glm::vec3), concat_streamlines.data(), GL_STATIC_DRAW);
+
+            g_render_gauss = false;
+        }
+        if (g_render_uniform) {
+            concat_streamlines.clear();
+
+            std::vector<glm::vec3> start_point_vector = uniform_startpoints(10);
+
+            for (int i = 0; i < start_point_vector.size(); i++) {
+                singular_streamline = iterate_streamline(start_point_vector[i], step_size, max_steps);
+                concatenate_streamlines(singular_streamline);
+            }
+
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+            glBufferData(GL_ARRAY_BUFFER, concat_streamlines.size() * sizeof(glm::vec3), concat_streamlines.data(), GL_STATIC_DRAW);
+
+            g_render_uniform = false;
+
+        }
+        glUseProgram(line_program);
+
+        glUniformMatrix4fv(glGetUniformLocation(line_program, "Projection"), 1, GL_FALSE,
+            glm::value_ptr(projection));
+        glUniformMatrix4fv(glGetUniformLocation(line_program, "Modelview"), 1, GL_FALSE,
+            glm::value_ptr(model_view));
+
         glBindVertexArray(VBO);
-        glDrawArrays(GL_LINES, 0, vertices.size());
+        glDrawArrays(GL_LINES, 0, concat_streamlines.size());
 
         //------------------------------------------------------------------------------------
 
